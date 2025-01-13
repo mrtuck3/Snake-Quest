@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Snake Game with Three Steps & Optional Mod</title>
+  <style>
+    /* BODY, BACKGROUND, CANVAS */
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      background: url('snake_game_background1.png') no-repeat center center fixed;
+      background-size: cover;
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      border: 4px solid #00ff00;
+      box-shadow: 0 0 20px 5px #00ff00;
+      background: rgba(0, 0, 0, 0.8);
+    }
+
+    /* SIDEBAR (FADE IN/OUT) */
+    #sidebar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 320px;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.8);
+      box-sizing: border-box;
+      padding: 20px;
+      color: #FFF;
+      font-family: Arial, sans-serif;
+      font-size: 16px;
+
+      /* Allows scrolling if content is taller than the sidebar */
+      overflow-y: auto;
+
+      opacity: 0;
+      transform: translateX(-30px);
+      pointer-events: none;
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      z-index: 9998;
+    }
+    #sidebar.visible {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: auto;
+    }
+
+    /* TOGGLE ARROW BUTTON (MIDDLE-LEFT) */
+    #toggleArrowBtn {
+      position: fixed;
+      top: 50%;
+      left: 0;
+      transform: translateY(-50%);
+      width: 40px;
+      height: 40px;
+      background: #444;
+      color: #fff;
+      border: 2px solid #aaa;
+      border-radius: 0 8px 8px 0;
+      cursor: pointer;
+      z-index: 9999;
+      font-size: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* SCORE/PLAYER, etc. within SIDEBAR */
+    #scoreContainer {
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+      min-width: 250px;
+    }
+    #scoreContainer div {
+      margin-bottom: 5px;
+    }
+
+    /* STEPS ABOVE FORM */
+    #playerSteps {
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: #00ff00;
+    }
+
+    #playerControl label {
+      display: block;
+      margin: 5px 0;
+    }
+    #playerControl input[type="text"], 
+    #playerControl input[type="number"] {
+      width: 120px;
+      margin-left: 5px;
+    }
+
+    /* The new Step 3 block for selecting a mod */
+    #modSelection label {
+      display: inline-flex;
+      align-items: center;
+      margin: 5px 0;
+      color: #fff;
+    }
+    #modSelection label input {
+      margin-right: 6px;
+    }
+
+    /* SPEED, MUSIC, TOGGLES, ETC. */
+    #speedControl,
+    #musicControl,
+    #togglesAndInfo {
+      background: rgba(0, 0, 0, 0.7);
+      padding: 10px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+    #togglesAndInfo label {
+      display: block;
+      margin: 5px 0;
+      cursor: pointer;
+    }
+    #toggleInfo {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    #toggleInfo ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    #infoDetailBtn {
+      margin: 5px 0;
+      padding: 4px 8px;
+      font-size: 14px;
+      cursor: pointer;
+      color: #fff;
+      background-color: #666;
+      border: 2px solid #999;
+      border-radius: 5px;
+    }
+
+    /* START GAME BUTTON (CENTER OF SCREEN) */
+    #startButton {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
+      font-size: 24px;
+      color: #FFFFFF;
+      background-color: #00ff00;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 20px 5px #00ff00;
+      z-index: 9999; /* Over the canvas */
+    }
+
+    /* GAME OVER OVERLAY */
+    #gameOverOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      color: #FF0000;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      text-align: center;
+      font-family: Arial, sans-serif;
+    }
+    #gameOverMessage {
+      font-size: 50px;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px #000;
+    }
+    #gameOverSubMessage {
+      font-size: 20px;
+      color: #FFFFFF;
+      margin-bottom: 30px;
+    }
+    /* Button on overlay to return to menu if no turns left */
+    #returnToMenuBtn {
+      padding: 12px 24px;
+      font-size: 18px;
+      color: #FFFFFF;
+      background-color: #00ff00;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 10px 2px #00ff00;
+    }
+  </style>
+</head>
+<body>
+  <!-- Toggle Arrow for the Sidebar -->
+  <button id="toggleArrowBtn" onclick="toggleSidebar()">></button>
+
+  <!-- Fadeable SIDEBAR with all menus/info -->
+  <div id="sidebar">
+    <div id="scoreContainer">
+      <div id="currentPlayerName">Player: -</div>
+
+      <!-- STEPS for clarity -->
+      <div id="playerSteps">
+        <strong>Step 1:</strong> Enter name<br/>
+        <strong>Step 2:</strong> How many turns?<br/>
+        <strong>Step 3:</strong> Pick a fun mod below (optional)
+      </div>
+
+      <div id="playerControl">
+        <form id="playerForm">
+          <label>
+            Player Name:
+            <input type="text" id="playerNameInput" placeholder="Enter name..." />
+          </label>
+          <label>
+            Number of Turns:
+            <input type="number" id="turnsInput" placeholder="Turns..." value="1" min="1" />
+          </label>
+
+          <!-- Step 3: A simple mod selection checkbox -->
+          <div id="modSelection">
+            <label>
+              <input type="checkbox" id="funModCheckbox" /> Enable Fun Mod?
+            </label>
+          </div>
+
+          <button type="submit">Submit</button>
+        </form>
+      </div>
+      <div id="currentScore">Score: 0</div>
+      <div id="highScore">High Score: -</div>
+      <div id="recentPlayers">
+        <strong>Recently Played:</strong>
+        <ul id="recentPlayersList" style="margin:0; padding-left:20px;"></ul>
+      </div>
+    </div>
+
+    <div id="speedControl">
+      <div>Speed:</div>
+      <button onclick="setSpeed('slow')">Slow</button>
+      <button onclick="setSpeed('standard')">Standard</button>
+      <button onclick="setSpeed('fast')">Fast</button>
+    </div>
+
+    <div id="musicControl">
+      <div>Music:</div>
+      <button onclick="playMusic('song1')">Play Song 1</button>
+      <button onclick="playMusic('song2')">Play Song 2</button>
+      <button onclick="playMusic('song3')">Play Song 3</button>
+      <button onclick="stopMusic()">Stop Music</button>
+    </div>
+
+    <div id="togglesAndInfo">
+      <div>Toggle Features:</div>
+      <label><input type="checkbox" id="toggleObstacles" onclick="toggleFeature('obstacles')" /> Obstacles</label>
+      <label><input type="checkbox" id="togglePowerUps" onclick="toggleFeature('powerUps')" /> Power-Ups</label>
+      <label><input type="checkbox" id="togglePoison" onclick="toggleFeature('poison')" /> Poisonous Items</label>
+      <label><input type="checkbox" id="toggleWrapAround" onclick="toggleFeature('wrapAround')" /> Wrap-Around World</label>
+      <label><input type="checkbox" id="togglePortals" onclick="toggleFeature('portals')" /> Portal Tiles</label>
+
+      <button id="infoDetailBtn" onclick="toggleInfoDetails()">Toggle Info Details</button>
+      <div id="toggleInfo">
+        <strong>Information about Toggles:</strong>
+        <ul>
+          <li><em>Obstacles</em>: Places random blocks on the field that end the game on contact.</li>
+          <li><em>Power-Ups</em>: Adds items that grow the snake by an extra segment.</li>
+          <li><em>Poisonous Items</em>: Spawns items that shrink the snake if eaten.</li>
+          <li><em>Wrap-Around World</em>: The snake reappears on the opposite edge instead of dying.</li>
+          <li><em>Portal Tiles</em>: Two tiles that teleport the snake’s head from one to the other.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- START GAME BUTTON (Centered) -->
+  <button id="startButton" onclick="startGame()">Start Game</button>
+
+  <!-- Canvas in the center for the game -->
+  <canvas id="gameCanvas"></canvas>
+
+  <!-- CUSTOM GAME OVER OVERLAY -->
+  <div id="gameOverOverlay">
+    <div id="gameOverMessage">Game Over!</div>
+    <div id="gameOverSubMessage"></div>
+    <!-- Only visible if no turns left -->
+    <button id="returnToMenuBtn" style="display: none;" onclick="returnToMenu()">Return to Menu</button>
+  </div>
+
+  <!-- Audio element for music -->
+  <audio id="backgroundMusic">
+    <source id="musicSource" src="First Day of School Fun.mp3" type="audio/mpeg"/>
+  </audio>
+
+  <script>
+    /********************************
+     *      SIDEBAR TOGGLE LOGIC    *
+     ********************************/
+    const sidebar = document.getElementById('sidebar');
+    const toggleArrowBtn = document.getElementById('toggleArrowBtn');
+    function toggleSidebar() {
+      if (sidebar.classList.contains('visible')) {
+        sidebar.classList.remove('visible');
+        toggleArrowBtn.textContent = '>';
+      } else {
+        sidebar.classList.add('visible');
+        toggleArrowBtn.textContent = '<';
+      }
+    }
+
+    function toggleInfoDetails() {
+      const toggleInfoEl = document.getElementById("toggleInfo");
+      if (toggleInfoEl.style.display === 'none') {
+        toggleInfoEl.style.display = 'block';
+      } else {
+        toggleInfoEl.style.display = 'none';
+      }
+    }
+
+    /********************************
+     *    MAIN GAME & UI VARIABLES  *
+     ********************************/
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    const currentScoreElement = document.getElementById("currentScore");
+    const highScoreElement = document.getElementById("highScore");
+    const currentPlayerNameEl = document.getElementById("currentPlayerName");
+    const recentPlayersListEl = document.getElementById("recentPlayersList");
+    const gameOverOverlay = document.getElementById("gameOverOverlay");
+    const gameOverMessageEl = document.getElementById("gameOverMessage");
+    const gameOverSubMessageEl = document.getElementById("gameOverSubMessage");
+    const returnToMenuBtn = document.getElementById("returnToMenuBtn");
+
+    const width = 900, height = 600;
+    canvas.width = width;
+    canvas.height = height;
+
+    // Snake
+    const blockSize = 30;
+    let snake = [{ x: width / 2, y: height / 2 }];
+    let direction = "RIGHT";
+    let food = getRandomPosition();
+    let score = 0;
+    let gameOver = false;
+
+    // Player info
+    let playerName = localStorage.getItem('currentPlayer') || 'Player1';
+    let playerScores = JSON.parse(localStorage.getItem('playerScores')) || {};
+    if (playerScores[playerName] === undefined) {
+      playerScores[playerName] = 0;
+      localStorage.setItem('playerScores', JSON.stringify(playerScores));
+    }
+    let playerTurns = JSON.parse(localStorage.getItem('playerTurns')) || {};
+    if (playerTurns[playerName] === undefined) {
+      playerTurns[playerName] = 1;
+      localStorage.setItem('playerTurns', JSON.stringify(playerTurns));
+    }
+    let playerHistory = JSON.parse(localStorage.getItem('playerHistory')) || [];
+
+    // Visual / Speed
+    let currentSnakeColor = getRandomColor();
+    let speed = 100;
+
+    // Music
+    const backgroundMusic = document.getElementById("backgroundMusic");
+    const musicSource = document.getElementById("musicSource");
+    const songQueue = ["song1", "song2", "song3"];
+    let currentSongIndex = 0;
+
+    // Toggles
+    let obstaclesEnabled = false;
+    let powerUpsEnabled = false;
+    let poisonEnabled = false;
+    let wrapAroundEnabled = false;
+    let portalsEnabled = false;
+    let obstacles = [];
+    let powerUps = [];
+    let poisons = [];
+    let portals = [];
+
+    // Example: If "Fun Mod" is enabled, you could do something special in the game
+    let funModEnabled = false;
+
+    /********************************
+     *  RECENT PLAYER HISTORY UI    *
+     ********************************/
+    function addPlayerToHistory(pName) {
+      // Remove if exists, then unshift
+      playerHistory = playerHistory.filter(n => n !== pName);
+      playerHistory.unshift(pName);
+      // Keep only last 5
+      if (playerHistory.length > 5) {
+        playerHistory.pop();
+      }
+      localStorage.setItem('playerHistory', JSON.stringify(playerHistory));
+      updateRecentPlayersUI();
+    }
+    function updateRecentPlayersUI() {
+      recentPlayersListEl.innerHTML = '';
+      for (let name of playerHistory) {
+        const li = document.createElement('li');
+        li.textContent = name;
+        recentPlayersListEl.appendChild(li);
+      }
+    }
+
+    /********************************
+     *   PLAYER & TURNS SETUP       *
+     ********************************/
+    document.getElementById('playerForm').addEventListener('submit', (event) => {
+      event.preventDefault();
+      setPlayerAndTurns();
+    });
+
+    function setPlayerAndTurns() {
+      const nameInput = document.getElementById('playerNameInput');
+      const turnsInput = document.getElementById('turnsInput');
+
+      // Step 3: Check if user wants the "fun mod"
+      const funModCheckbox = document.getElementById('funModCheckbox');
+      funModEnabled = funModCheckbox.checked; // store in global variable
+
+      const newName = nameInput.value.trim() || 'Player1';
+      const newTurns = parseInt(turnsInput.value, 10);
+
+      playerName = newName;
+      localStorage.setItem('currentPlayer', playerName);
+
+      if (playerScores[playerName] === undefined) {
+        playerScores[playerName] = 0;
+      }
+      if (!isNaN(newTurns) && newTurns > 0) {
+        playerTurns[playerName] = newTurns;
+      } else if (playerTurns[playerName] === undefined) {
+        playerTurns[playerName] = 1;
+      }
+      localStorage.setItem('playerScores', JSON.stringify(playerScores));
+      localStorage.setItem('playerTurns', JSON.stringify(playerTurns));
+      addPlayerToHistory(playerName);
+
+      nameInput.value = '';
+      turnsInput.value = '1';
+
+      resetGame();
+      document.getElementById('startButton').style.display = '';
+      stopMusic();
+
+      // Switch background #2
+      document.body.style.background = "url('snake_game_background2.png') no-repeat center center fixed";
+      document.body.style.backgroundSize = 'cover';
+
+      updateScore();
+    }
+
+    /********************************
+     *       KEYBOARD CONTROLS      *
+     ********************************/
+    window.addEventListener("keydown", (event) => {
+      switch (event.key) {
+        case "ArrowLeft":
+          if (direction !== "RIGHT") direction = "LEFT";
+          break;
+        case "ArrowRight":
+          if (direction !== "LEFT") direction = "RIGHT";
+          break;
+        case "ArrowUp":
+          if (direction !== "DOWN") direction = "UP";
+          break;
+        case "ArrowDown":
+          if (direction !== "UP") direction = "DOWN";
+          break;
+      }
+    });
+
+    /********************************
+     *        TOGGLE FEATURES       *
+     ********************************/
+    function toggleFeature(featureName) {
+      switch (featureName) {
+        case 'obstacles':
+          obstaclesEnabled = !obstaclesEnabled;
+          if (obstaclesEnabled) generateObstacles(5);
+          else obstacles = [];
+          break;
+        case 'powerUps':
+          powerUpsEnabled = !powerUpsEnabled;
+          if (powerUpsEnabled) generatePowerUp();
+          else powerUps = [];
+          break;
+        case 'poison':
+          poisonEnabled = !poisonEnabled;
+          if (poisonEnabled) generatePoison();
+          else poisons = [];
+          break;
+        case 'wrapAround':
+          wrapAroundEnabled = !wrapAroundEnabled;
+          break;
+        case 'portals':
+          portalsEnabled = !portalsEnabled;
+          if (portalsEnabled) generatePortals();
+          else portals = [];
+          break;
+      }
+    }
+
+    /********************************
+     *         DRAW HELPERS         *
+     ********************************/
+    function drawRect(color, x, y, w, h) {
+      ctx.fillStyle = color;
+      ctx.fillRect(x, y, w, h);
+    }
+    function drawSnake() {
+      snake.forEach(seg => {
+        drawRect(currentSnakeColor, seg.x, seg.y, blockSize, blockSize);
+      });
+      // If "fun mod" is on, you could do something special, e.g. draw sparkles
+      if (funModEnabled) {
+        // Just an example - draw a small star on the snake's head
+        const head = snake[0];
+        ctx.fillStyle = "#FFFF00";
+        ctx.beginPath();
+        ctx.arc(head.x + blockSize / 2, head.y + blockSize / 2, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    function drawFood() {
+      drawRect("#FF4500", food.x, food.y, blockSize, blockSize);
+    }
+    function drawObstacles() {
+      obstacles.forEach(obs => drawRect("#8B4513", obs.x, obs.y, blockSize, blockSize));
+    }
+    function drawPowerUps() {
+      powerUps.forEach(pu => drawRect("#00FFFF", pu.x, pu.y, blockSize, blockSize));
+    }
+    function drawPoison() {
+      poisons.forEach(ps => drawRect("#8B0000", ps.x, ps.y, blockSize, blockSize));
+    }
+    function drawPortals() {
+      portals.forEach(pt => drawRect("#ADFF2F", pt.x, pt.y, blockSize, blockSize));
+    }
+
+    /********************************
+     *         GAME UPDATES         *
+     ********************************/
+    function updateSnakePosition() {
+      const head = { ...snake[0] };
+      switch (direction) {
+        case "LEFT": head.x -= blockSize; break;
+        case "RIGHT": head.x += blockSize; break;
+        case "UP": head.y -= blockSize; break;
+        case "DOWN": head.y += blockSize; break;
+      }
+      if (wrapAroundEnabled) {
+        if (head.x < 0) head.x = width - blockSize;
+        if (head.x >= width) head.x = 0;
+        if (head.y < 0) head.y = height - blockSize;
+        if (head.y >= height) head.y = 0;
+      }
+      snake.unshift(head);
+
+      // Eat food
+      if (head.x === food.x && head.y === food.y) {
+        food = getRandomPosition();
+        currentSnakeColor = getRandomColor();
+        score++;
+        updateScore();
+      } else {
+        snake.pop();
+      }
+    }
+
+    function checkCollision() {
+      const head = snake[0];
+      // Walls if wrap-around off
+      if (!wrapAroundEnabled) {
+        if (head.x < 0 || head.x >= width || head.y < 0 || head.y >= height) {
+          triggerGameOver("Wall collision!");
+        }
+      }
+      // Self collision
+      for (let i = 1; i < snake.length; i++) {
+        if (head.x === snake[i].x && head.y === snake[i].y) {
+          triggerGameOver("You hit yourself!");
+        }
+      }
+      // Obstacles
+      if (obstaclesEnabled) {
+        for (let obs of obstacles) {
+          if (head.x === obs.x && head.y === obs.y) {
+            triggerGameOver("Obstacle collision!");
+          }
+        }
+      }
+      // Power-ups
+      if (powerUpsEnabled) {
+        for (let i = 0; i < powerUps.length; i++) {
+          if (head.x === powerUps[i].x && head.y === powerUps[i].y) {
+            snake.push({ ...snake[snake.length - 1] });
+            powerUps.splice(i, 1);
+            generatePowerUp();
+            break;
+          }
+        }
+      }
+      // Poison
+      if (poisonEnabled) {
+        for (let i = 0; i < poisons.length; i++) {
+          if (head.x === poisons[i].x && head.y === poisons[i].y) {
+            if (snake.length > 1) snake.pop();
+            poisons.splice(i, 1);
+            generatePoison();
+            break;
+          }
+        }
+      }
+      // Portals
+      if (portalsEnabled && portals.length === 2) {
+        if (head.x === portals[0].x && head.y === portals[0].y) {
+          head.x = portals[1].x;
+          head.y = portals[1].y;
+        } else if (head.x === portals[1].x && head.y === portals[1].y) {
+          head.x = portals[0].x;
+          head.y = portals[0].y;
+        }
+      }
+    }
+
+    /********************************
+     *       GAME OVER LOGIC        *
+     ********************************/
+    function triggerGameOver(reason) {
+      if (!gameOver) {
+        gameOver = true;
+        if (playerTurns[playerName] > 0) {
+          playerTurns[playerName]--;
+        }
+        localStorage.setItem('playerTurns', JSON.stringify(playerTurns));
+
+        // Show overlay
+        gameOverOverlay.style.display = 'flex';
+        gameOverMessageEl.style.color = "#FF0000";
+        ctx.clearRect(0, 0, width, height);
+
+        if (playerTurns[playerName] <= 0) {
+          // No turns left
+          gameOverMessageEl.textContent = "No Turns Left!";
+          gameOverSubMessageEl.textContent = `${playerName} has no turns left. Please enter a new player name and turns.`;
+          stopMusic();
+          // Show "Return to Menu" button
+          returnToMenuBtn.style.display = "inline-block";
+        } else {
+          // Turns remain
+          gameOverMessageEl.textContent = "Game Over!";
+          gameOverSubMessageEl.textContent = `Reason: ${reason}. Try Again!`;
+          returnToMenuBtn.style.display = "none"; // hide the button for partial turns
+
+          setTimeout(() => {
+            gameOverOverlay.style.display = 'none';
+            resetGame();
+            gameLoop();
+          }, 2000);
+        }
+      }
+    }
+
+    /* Called by "Return to Menu" button if no turns left */
+    function returnToMenu() {
+      gameOverOverlay.style.display = 'none';
+      sidebar.classList.add('visible');
+      toggleArrowBtn.textContent = '<';
+      gameOver = false;
+    }
+
+    /********************************
+     *       RESET & RESTART        *
+     ********************************/
+    function resetGame() {
+      gameOver = false;
+      snake = [{ x: width / 2, y: height / 2 }];
+      direction = "RIGHT";
+      score = 0;
+      updateScore();
+
+      if (obstaclesEnabled) generateObstacles(5); else obstacles = [];
+      if (powerUpsEnabled) { powerUps = []; generatePowerUp(); }
+      if (poisonEnabled) { poisons = []; generatePoison(); }
+      if (portalsEnabled) { generatePortals(); } else portals = [];
+    }
+
+    /********************************
+     *     RANDOM GENERATORS        *
+     ********************************/
+    function getRandomColor() {
+      const letters = '0123456789ABCDEF';
+      let color = '#';
+      for (let i = 0; i < 6; i++) {
+        color += letters[Math.floor(Math.random() * 16)];
+      }
+      return color;
+    }
+    function getRandomPosition() {
+      return {
+        x: Math.floor(Math.random() * (width / blockSize)) * blockSize,
+        y: Math.floor(Math.random() * (height / blockSize)) * blockSize
+      };
+    }
+    function generateObstacles(count) {
+      obstacles = [];
+      for (let i = 0; i < count; i++) {
+        obstacles.push(getRandomPosition());
+      }
+    }
+    function generatePowerUp() {
+      powerUps.push(getRandomPosition());
+    }
+    function generatePoison() {
+      poisons.push(getRandomPosition());
+    }
+    function generatePortals() {
+      portals = [];
+      portals.push(getRandomPosition());
+      portals.push(getRandomPosition());
+    }
+
+    /********************************
+     *    SCORE & BACKGROUND        *
+     ********************************/
+    function updateScore() {
+      currentPlayerNameEl.textContent = "Player: " + playerName;
+      currentScoreElement.textContent = "Score: " + score;
+
+      if (score > (playerScores[playerName] || 0)) {
+        playerScores[playerName] = score;
+        localStorage.setItem('playerScores', JSON.stringify(playerScores));
+      }
+      let topPlayer = null;
+      let topScoreVal = 0;
+      for (let [pName, pScore] of Object.entries(playerScores)) {
+        if (pScore > topScoreVal) {
+          topScoreVal = pScore;
+          topPlayer = pName;
+        }
+      }
+      if (topPlayer) {
+        highScoreElement.textContent = `High Score: ${topPlayer} - ${topScoreVal}`;
+      } else {
+        highScoreElement.textContent = "High Score: -";
+      }
+    }
+
+    /********************************
+     *         GAME LOOP            *
+     ********************************/
+    function gameLoop() {
+      if (gameOver) return;
+      ctx.clearRect(0, 0, width, height);
+
+      drawFood();
+      if (obstaclesEnabled) drawObstacles();
+      if (powerUpsEnabled) drawPowerUps();
+      if (poisonEnabled) drawPoison();
+      if (portalsEnabled) drawPortals();
+
+      updateSnakePosition();
+      checkCollision();
+      drawSnake();
+
+      setTimeout(gameLoop, speed);
+    }
+
+    /********************************
+     *       SPEED CONTROL          *
+     ********************************/
+    function setSpeed(level) {
+      switch (level) {
+        case 'slow': speed = 200; break;
+        case 'standard': speed = 100; break;
+        case 'fast': speed = 50; break;
+      }
+    }
+
+    /********************************
+     *      MUSIC CONTROLS          *
+     ********************************/
+    backgroundMusic.addEventListener('ended', () => {
+      if (!gameOver) {
+        currentSongIndex = (currentSongIndex + 1) % songQueue.length;
+        playMusic(songQueue[currentSongIndex]);
+      }
+    });
+    function playMusic(song) {
+      if (song === 'song1') currentSongIndex = 0;
+      else if (song === 'song2') currentSongIndex = 1;
+      else if (song === 'song3') currentSongIndex = 2;
+
+      switch (song) {
+        case 'song1':
+          musicSource.src = 'First Day of School Fun.mp3';
+          break;
+        case 'song2':
+          musicSource.src = "Jojo's Big Day.mp3";
+          break;
+        case 'song3':
+          musicSource.src = "Kyla, Jackson, and JoJo's Day.mp3";
+          break;
+      }
+      backgroundMusic.load();
+      backgroundMusic.play().catch((error) => {
+        console.error('Failed to play background music:', error);
+      });
+    }
+    function stopMusic() {
+      backgroundMusic.pause();
+      backgroundMusic.currentTime = 0;
+    }
+
+    /********************************
+     *       START GAME FUNC        *
+     ********************************/
+    function startGame() {
+      // Hide the sidebar on Start
+      if (sidebar.classList.contains('visible')) {
+        sidebar.classList.remove('visible');
+        toggleArrowBtn.textContent = '>';
+      }
+
+      // If the current player has no turns, show custom overlay
+      if (playerTurns[playerName] <= 0) {
+        gameOverOverlay.style.display = 'flex';
+        gameOverMessageEl.textContent = "No Turns Left!";
+        gameOverMessageEl.style.color = "#FF0000";
+        gameOverSubMessageEl.textContent = `${playerName} has no turns left. Please enter a new player name and turns.`;
+        stopMusic();
+        returnToMenuBtn.style.display = "inline-block";
+        return; 
+      }
+
+      if (gameOver) {
+        resetGame();
+      }
+      document.getElementById('startButton').style.display = 'none';
+
+      currentSongIndex = 0;
+      playMusic(songQueue[currentSongIndex]);
+
+      gameLoop();
+    }
+
+    // INIT
+    updateRecentPlayersUI();
+    updateScore();
+  </script>
+</body>
+</html>
